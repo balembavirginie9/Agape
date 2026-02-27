@@ -72,7 +72,10 @@ mongoose
 // routes
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
+const bookingRoutes = require("./routes/bookings.routes");
 
+// later, mount user-facing bookings
+app.use("/api/bookings", authLimiter, bookingRoutes);
 app.use("/api/admin", adminLimiter, adminRoutes);
 app.use("/api/users", authLimiter, authRoutes);
 
