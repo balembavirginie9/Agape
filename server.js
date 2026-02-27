@@ -1,3 +1,4 @@
+// backend/server.js
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
@@ -40,7 +41,13 @@ if (process.env.NODE_ENV === "production") {
 
 // parsing and CORS
 app.use(cors());
-app.use(express.json({ limit: "50kb" }));
+app.use(express.json({ limit: "100kb" }));
+
+// small request logger to help debug routing issues
+app.use((req, res, next) => {
+  console.log(new Date().toISOString(), req.method, req.url);
+  next();
+});
 
 // rate limiters
 const authLimiter = rateLimit({
@@ -69,13 +76,20 @@ mongoose
     process.exit(1);
   });
 
-// routes
+// routes (auth & admin)
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
+
+// bookings routes export two routers: { user, admin }
 const bookingRoutes = require("./routes/bookings.routes");
 
-// later, mount user-facing bookings
-app.use("/api/bookings", authLimiter, bookingRoutes);
+// mount bookings user routes at /api/bookings (protected using authLimiter)
+app.use("/api/bookings", authLimiter, bookingRoutes.user);
+
+// mount admin-only bookings routes at /api/admin/bookings (protected using adminLimiter)
+app.use("/api/admin/bookings", adminLimiter, bookingRoutes.admin);
+
+// mount other admin & user routes you already had
 app.use("/api/admin", adminLimiter, adminRoutes);
 app.use("/api/users", authLimiter, authRoutes);
 
@@ -92,6 +106,7 @@ if (fs.existsSync(frontendPath) && fs.statSync(frontendPath).isDirectory()) {
     res.sendFile(path.join(frontendPath, "index.html"));
   });
 
+  // serve index.html for any non-API routes (SPA fallback)
   app.get(/^(?!\/api\/).*/, (req, res) => {
     res.sendFile(path.join(frontendPath, "index.html"));
   });

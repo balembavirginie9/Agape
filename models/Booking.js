@@ -1,3 +1,4 @@
+// backend/models/Booking.js
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 

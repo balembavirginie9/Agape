@@ -1,16 +1,19 @@
+// backend/routes/bookings.routes.js
 const express = require("express");
-const router = express.Router();
 const Booking = require("../models/Booking");
 const auth = require("../middleware/auth");
 const adminAuth = require("../middleware/adminAuth");
 const mongoose = require("mongoose");
+
+// user-facing router (mount at /api/bookings)
+const userRouter = express.Router();
 
 /**
  * POST /api/bookings
  * body: { type, duration, platform, platformDetails, scheduledAt, notes }
  * requires auth
  */
-router.post("/", auth, async (req, res) => {
+userRouter.post("/", auth, async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -46,7 +49,7 @@ router.post("/", auth, async (req, res) => {
 
     await booking.save();
 
-    // return booking (populate user minimal if needed)
+    // return booking
     return res.status(201).json({ message: "Booking created", booking });
   } catch (err) {
     console.error("CREATE BOOKING ERROR", err);
@@ -58,7 +61,7 @@ router.post("/", auth, async (req, res) => {
  * GET /api/bookings/me
  * returns bookings for logged-in user
  */
-router.get("/me", auth, async (req, res) => {
+userRouter.get("/me", auth, async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -73,11 +76,18 @@ router.get("/me", auth, async (req, res) => {
   }
 });
 
+// ----------------- admin router -----------------
+// admin router will be mounted at /api/admin/bookings
+const adminRouter = express.Router();
+
+// require admin for all adminRouter routes
+adminRouter.use(adminAuth);
+
 /**
- * Admin: GET /api/admin/bookings
+ * GET /api/admin/bookings
  * query: page, limit, status
  */
-router.get("/admin/bookings", adminAuth, async (req, res) => {
+adminRouter.get("/", async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
@@ -90,8 +100,6 @@ router.get("/admin/bookings", adminAuth, async (req, res) => {
 
     if (req.query.status) filter.status = req.query.status;
     if (q) {
-      // search by user email/username? populate user
-      // Keep it simple: try match booking notes or platformDetails
       const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
       filter.$or = [{ notes: re }, { platformDetails: re }, { platform: re }];
     }
@@ -117,10 +125,10 @@ router.get("/admin/bookings", adminAuth, async (req, res) => {
 });
 
 /**
- * Admin: PATCH /api/admin/bookings/:id
+ * PATCH /api/admin/bookings/:id
  * body: { action: 'approve'|'cancel'|'reschedule', adminNote?, rescheduledTo? }
  */
-router.patch("/admin/bookings/:id", adminAuth, async (req, res) => {
+adminRouter.patch("/:id", async (req, res) => {
   try {
     const id = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -150,7 +158,6 @@ router.patch("/admin/bookings/:id", adminAuth, async (req, res) => {
     }
 
     await booking.save();
-    // Optionally populate user
     await booking.populate("user", "firstName lastName email username");
     return res.json({ message: "Booking updated", booking });
   } catch (err) {
@@ -159,4 +166,8 @@ router.patch("/admin/bookings/:id", adminAuth, async (req, res) => {
   }
 });
 
-module.exports = router;
+// export both routers
+module.exports = {
+  user: userRouter,
+  admin: adminRouter,
+};
